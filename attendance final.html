@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Attendance & Payroll System</title>
+
+<style>
+body{font-family:Arial;background:#eef2f7;margin:0}
+header{background:#0f172a;color:#fff;padding:15px;text-align:center}
+nav{display:flex;gap:10px;justify-content:center;margin:15px;flex-wrap:wrap}
+button{padding:8px 14px;border:none;background:#2563eb;color:#fff;border-radius:4px;cursor:pointer}
+button:hover{background:#1e40af}
+.card{background:#fff;margin:15px auto;padding:15px;max-width:1400px;border-radius:6px}
+.hidden{display:none}
+table{width:100%;border-collapse:collapse;margin-top:10px}
+th,td{border:1px solid #ccc;padding:6px;text-align:center}
+select,input{padding:6px}
+
+.status-P{color:green;font-weight:bold}
+.status-A{color:red;font-weight:bold}
+.status-H{color:orange;font-weight:bold}
+.status-L{color:brown;font-weight:bold}
+
+.paid-label{font-size:11px;color:green;font-weight:bold}
+</style>
+</head>
+
+<body>
+
+<header><h2>Employee Attendance & Payroll System</h2></header>
+
+<nav>
+<button onclick="showTab('emp')">Employee Master</button>
+<button onclick="showTab('att')">Attendance</button>
+<button onclick="showTab('calc')">Calculation</button>
+<button onclick="showTab('check')">Check Attendance</button>
+<button onclick="showTab('advance')">Advance</button>
+<button onclick="showTab('paid')">Salary Paid</button>
+<button onclick="showTab('admin')">Admin Dashboard</button>
+<button onclick="showTab('late')">Late Deduction</button>
+<button onclick="showTab('history')">Employee History</button>
+</nav>
+
+<!-- EMPLOYEE MASTER -->
+<div id="emp" class="card hidden">
+<h3>Employee Master</h3>
+<input id="ename" placeholder="Employee Name">
+<input id="esalary" type="number" placeholder="Monthly Salary">
+<input id="eleave" type="number" placeholder="Allowed Leave">
+<select id="etype"><option>Shop</option><option>Godown</option></select>
+<button onclick="saveEmployee()">Save</button>
+<table id="empTable"></table>
+</div>
+
+<!-- ATTENDANCE -->
+<div id="att" class="card hidden">
+<h3>Attendance</h3>
+<input type="date" id="adate">
+<button onclick="loadAttendance()">Load</button>
+<button onclick="saveAttendance()">Save</button>
+<table id="attTable"></table>
+</div>
+
+<!-- CALCULATION -->
+<div id="calc" class="card hidden">
+<h3>Salary Calculation</h3>
+<select id="calcEmp"></select>
+<select id="calcMonth"></select>
+<select id="calcYear"></select>
+<button onclick="calculateSalary()">Calculate</button>
+<button onclick="printSalary()">Print</button>
+<button onclick="showIndividualAttendance()">View Attendance</button>
+<div id="calcResult"></div>
+<table id="indAttTable"></table>
+</div>
+
+<!-- CHECK ATTENDANCE -->
+<div id="check" class="card hidden">
+<h3>Check Attendance</h3>
+<select id="checkMonth"></select>
+<select id="checkYear"></select>
+<button onclick="renderCheckAttendance()">View</button>
+<button onclick="exportAttendanceExcel()">Export .xlsx</button>
+<table id="checkTable"></table>
+</div>
+
+<!-- ADVANCE -->
+<div id="advance" class="card hidden">
+<h3>Advance Records</h3>
+
+<select id="advViewMonth" onchange="renderAdvances()"></select>
+<select id="advViewYear" onchange="renderAdvances()"></select>
+
+<table id="advTable"></table>
+
+<h4>Add New Advance</h4>
+<select id="advEmp"></select>
+<input type="date" id="advDate">
+<input type="number" id="advAmount" placeholder="Amount">
+<input id="advDesc" placeholder="Description">
+<select id="advMonth"></select>
+<select id="advYear"></select>
+<button onclick="saveAdvance()">Add Advance</button>
+
+<hr>
+<button style="background:red" onclick="resetAdvance()">HARD RESET ADVANCE</button>
+<p><b>(PASSWORD IS 7000021952)</b></p>
+</div>
+
+<!-- SALARY PAID -->
+<div id="paid" class="card hidden">
+<h3>Salary Paid</h3>
+<select id="paidYear" onchange="renderPaid()"></select>
+<table id="paidTable"></table>
+</div>
+
+<!-- ADMIN -->
+<div id="admin" class="card hidden">
+<h3>Admin Dashboard</h3>
+<input type="date" id="adminDate">
+<button onclick="drawAdmin()">Show Pie Charts</button>
+
+<h4>Shop Attendance</h4>
+<canvas id="shopPie" width="300" height="300"></canvas>
+
+<h4>Godown Attendance</h4>
+<canvas id="godownPie" width="300" height="300"></canvas>
+
+<hr>
+<button style="background:red" onclick="hardReset()">HARD RESET ATTENDANCE</button>
+<p><b>(PASSWORD IS 7000021952)</b></p>
+</div>
+
+<!-- LATE DEDUCTION -->
+<div id="late" class="card hidden">
+<h3>Late Deduction</h3>
+
+<select id="lateMonth"></select>
+<select id="lateYear"></select>
+<button onclick="renderLateDeduction()">View</button>
+
+<table id="lateTable"></table>
+
+<h3 id="lateTotal"></h3>
+</div>
+
+<!-- EMPLOYEE HISTORY -->
+<div id="history" class="card hidden">
+    <h3>Employee History</h3>
+
+    <select id="histEmp"></select>
+<select id="histMonth"></select>
+<select id="histYear"></select>
+<button onclick="renderHistory()">Search</button>
+
+    <h4>Attendance History</h4>
+    <table id="histAttTable"></table>
+
+    <h4>Salary History</h4>
+    <table id="histSalaryTable"></table>
+
+    <h4>Advances Taken</h4>
+    <table id="histAdvTable"></table>
+</div>
+
+<script>
+let employees=JSON.parse(localStorage.getItem("emps")||"[]");
+let attendance=JSON.parse(localStorage.getItem("att")||"{}");
+let advances=JSON.parse(localStorage.getItem("adv")||"[]");
+let paid=JSON.parse(localStorage.getItem("paid")||"{}");
+let editIndex=-1,tempAtt={};
+
+const months=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const years=[2026,2027,2028,2029,2030,2031,2032,2033,2034,2035];
+const now=new Date();
+
+/* TAB */
+function showTab(id){
+document.querySelectorAll('.card').forEach(c=>c.classList.add('hidden'));
+document.getElementById(id).classList.remove('hidden');
+loadDropdowns();
+renderEmployees();
+renderAdvances();
+renderPaid();
+}
+
+/* EMPLOYEE */
+function saveEmployee(){
+let emp={name:ename.value,salary:+esalary.value,leave:+eleave.value,type:etype.value};
+if(editIndex>-1){employees[editIndex]=emp;editIndex=-1;}
+else employees.push(emp);
+localStorage.setItem("emps",JSON.stringify(employees));
+ename.value=esalary.value=eleave.value="";
+renderEmployees();
+}
+
+function renderEmployees(){
+empTable.innerHTML="<tr><th>⇅</th><th>Name</th><th>Salary</th><th>Leave</th><th>Type</th><th>Edit</th><th>Delete</th></tr>"+
+employees.map((e,i)=>`<tr draggable="true"
+ondragstart="dragStart(${i})"
+ondragover="event.preventDefault()"
+ondrop="dropRow(${i})">
+<td style="cursor:grab">☰</td>
+<td>${e.name}</td><td>${e.salary}</td><td>${e.leave}</td><td>${e.type}</td>
+<td><button onclick="editEmp(${i})">Edit</button></td>
+<td><button style="background:red" onclick="deleteEmp(${i})">Delete</button></td>
+</tr>`).join("");
+}
+
+function editEmp(i){
+let e=employees[i];
+ename.value=e.name;esalary.value=e.salary;eleave.value=e.leave;etype.value=e.type;
+editIndex=i;
+}
+function deleteEmp(i){
+if(!confirm("Are you sure you want to delete this employee?")) return;
+
+let name=employees[i].name;
+
+/* remove employee */
+employees.splice(i,1);
+localStorage.setItem("emps",JSON.stringify(employees));
+
+/* remove attendance entries */
+for(let d in attendance){
+delete attendance[d][name];
+}
+localStorage.setItem("att",JSON.stringify(attendance));
+
+/* remove advances */
+advances=advances.filter(a=>a.name!==name);
+localStorage.setItem("adv",JSON.stringify(advances));
+
+/* remove salary paid marks */
+for(let k in paid){
+if(k.startsWith(name+"_")) delete paid[k];
+}
+localStorage.setItem("paid",JSON.stringify(paid));
+
+renderEmployees();
+alert("Employee deleted successfully");
+}
+
+/* ATTENDANCE */
+function loadAttendance(){
+tempAtt={};
+attTable.innerHTML="<tr><th>Employee</th><th>Status</th></tr>"+
+employees.map(e=>`<tr><td>${e.name}</td><td>
+<select onchange="tempAtt['${e.name}']=this.value">
+<option></option><option value="P">P</option>
+<option value="A">A</option><option value="H">H</option>
+<option value="L">L</option></select></td></tr>`).join("");
+}
+
+function saveAttendance(){
+attendance[adate.value]={...attendance[adate.value],...tempAtt};
+localStorage.setItem("att",JSON.stringify(attendance));
+alert("Attendance Saved");
+}
+
+/* CALCULATION */
+function calculateSalary(){
+let emp=employees.find(e=>e.name===calcEmp.value);
+let m=+calcMonth.value,y=+calcYear.value;
+let daily=emp.salary/30;
+let weekdayA=0,weekendA=0,half=0,late=0,present=0;
+
+for(let d in attendance){
+let dt=new Date(d);
+if(dt.getMonth()!=m||dt.getFullYear()!=y)continue;
+let s=attendance[d][emp.name];
+if(s==="A"){
+(dt.getDay()==0||dt.getDay()==6)?weekendA++:weekdayA++;
+}
+if(s==="H")half++;
+if(s==="L")late++;
+if(s==="P")present++;
+}
+
+let extra=daily*emp.leave;
+
+let weekendDeduction = emp.type==="Godown"
+? weekendA*daily
+: weekendA*1.5*daily;
+
+let deduct=(weekdayA*daily)+weekendDeduction+(half*0.5*daily)+(late*0.2*daily);
+
+let adv=advances.filter(a=>a.name===emp.name&&a.month==m&&a.year==y)
+.reduce((s,a)=>s+a.amount,0);
+
+let final=emp.salary+extra-deduct-adv;
+
+calcResult.innerHTML=`
+<p>Present: ${present}</p>
+<p>Weekday Absent: ${weekdayA}</p>
+<p>Weekend Absent: ${weekendA}</p>
+<p>Half Day: ${half}</p>
+<p>Late: ${late}</p>
+<p>Extra Salary: ₹${extra.toFixed(2)}</p>
+<p>Advance Deduction: ₹${adv}</p>
+<h3>Final Salary: ₹${final.toFixed(2)}</h3>`;
+showIndividualAttendance();
+}
+
+function showIndividualAttendance(){
+let empName=calcEmp.value;
+let m=+calcMonth.value;
+let y=+calcYear.value;
+
+let rows=[];
+for(let d in attendance){
+let dt=new Date(d);
+if(dt.getMonth()==m && dt.getFullYear()==y){
+rows.push({
+date:d,
+status:attendance[d][empName]||""
+});
+}
+}
+
+if(rows.length===0){
+indAttTable.innerHTML="<tr><td>No attendance data</td></tr>";
+return;
+}
+
+rows.sort((a,b)=>new Date(a.date)-new Date(b.date));
+
+indAttTable.innerHTML=
+"<tr><th>Date</th><th>Status</th></tr>"+
+rows.map(r=>`
+<tr>
+<td>${r.date}</td>
+<td class="status-${r.status}">${r.status}</td>
+</tr>
+`).join("");
+}
+
+/* PRINT 80MM */
+function printSalary(){
+let emp=employees.find(e=>e.name===calcEmp.value);
+let m=+calcMonth.value,y=+calcYear.value;
+let daily=emp.salary/30;
+
+let weekdayA=0,weekendA=0,half=0,late=0,present=0;
+
+for(let d in attendance){
+let dt=new Date(d);
+if(dt.getMonth()!=m||dt.getFullYear()!=y)continue;
+let s=attendance[d][emp.name];
+if(s==="A"){
+(dt.getDay()==0||dt.getDay()==6)?weekendA++:weekdayA++;
+}
+if(s==="H")half++;
+if(s==="L")late++;
+if(s==="P")present++;
+}
+
+let advanceAmt=advances.filter(a=>a.name===emp.name&&a.month==m&&a.year==y)
+.reduce((s,a)=>s+a.amount,0);
+
+let weekendDeduction=emp.type==="Godown"
+? weekendA*daily
+: weekendA*1.5*daily;
+
+let totalPayable=emp.salary+(daily*emp.leave)
+-(weekdayA*daily)-weekendDeduction
+-(half*0.5*daily)-(late*0.2*daily)
+-advanceAmt;
+
+let html=`
+<html>
+<head>
+<style>
+@page{size:80mm 110mm;margin:0}
+body{font-family:Arial;font-size:11px;margin:0;padding:5mm}
+h2{text-align:center;font-size:13px;margin:4px 0}
+p{margin:2px 0}
+hr{border:0;border-top:1px dashed #000;margin:4px 0}
+.total{text-align:center;font-size:13px;font-weight:bold}
+</style>
+</head>
+<body>
+<h2>SALARY SLIP</h2>
+<hr>
+<p><b>Month:</b> ${months[m]} ${y}</p>
+<p><b>Name:</b> ${emp.name}</p>
+<p><b>Present:</b> ${present}</p>
+<p><b>Half Day:</b> ${half}</p>
+<p><b>Late:</b> ${late}</p>
+<p><b>Weekday Absent:</b> ${weekdayA}</p>
+<p><b>Weekend Absent:</b> ${weekendA}</p>
+<p><b>Advance:</b> ₹${advanceAmt}</p>
+<hr>
+<div class="total">TOTAL PAYABLE<br>₹${totalPayable.toFixed(2)}</div>
+</body></html>`;
+
+let w=window.open("","","width=380,height=520");
+w.document.write(html);
+w.document.close();
+w.print();
+w.close();
+}
+
+/* CHECK */
+function renderCheckAttendance(){
+let m=+checkMonth.value,y=+checkYear.value;
+let dates=Object.keys(attendance).filter(d=>{
+let dt=new Date(d);
+return dt.getMonth()==m&&dt.getFullYear()==y;
+});
+checkTable.innerHTML="<tr><th>Date</th>"+employees.map(e=>`<th>${e.name}</th>`).join("")+"</tr>"+
+dates.map(d=>"<tr><td>"+d+"</td>"+employees.map(e=>`<td class='status-${attendance[d][e.name]||""}'>${attendance[d][e.name]||""}</td>`).join("")+"</tr>").join("");
+}
+
+function exportAttendanceExcel(){
+let m=+checkMonth.value,y=+checkYear.value;
+
+let dates=Object.keys(attendance).filter(d=>{
+let dt=new Date(d);
+return dt.getMonth()==m && dt.getFullYear()==y;
+}).sort();
+
+if(dates.length===0){
+alert("No attendance data for selected month");
+return;
+}
+
+let data=[];
+let header=["Date",...employees.map(e=>e.name)];
+data.push(header);
+
+dates.forEach(d=>{
+let row=[d];
+employees.forEach(e=>{
+row.push(attendance[d][e.name]||"");
+});
+data.push(row);
+});
+
+let ws=XLSX.utils.aoa_to_sheet(data);
+let wb=XLSX.utils.book_new();
+XLSX.utils.book_append_sheet(wb,ws,"Attendance");
+
+let fileName=`Attendance_${months[m]}_${y}.xlsx`;
+XLSX.writeFile(wb,fileName);
+}
+
+/* ADVANCE */
+function saveAdvance(){
+advances.push({
+name:advEmp.value,date:advDate.value,
+amount:+advAmount.value,desc:advDesc.value,
+month:+advMonth.value,year:+advYear.value
+});
+localStorage.setItem("adv",JSON.stringify(advances));
+renderAdvances();alert("Advance Added");
+}
+
+function renderAdvances(){
+let m=+advViewMonth.value,y=+advViewYear.value;
+advTable.innerHTML="<tr><th>Name</th><th>Date</th><th>Amount</th><th>Description</th><th>Month</th><th>Year</th></tr>"+
+advances.filter(a=>a.month==m&&a.year==y)
+.map(a=>`<tr><td>${a.name}</td><td>${a.date}</td>
+<td>${a.amount}</td><td>${a.desc}</td>
+<td>${months[a.month]}</td><td>${a.year}</td></tr>`).join("");
+}
+
+function resetAdvance(){
+if(prompt("Password")==="7000021952"){
+localStorage.removeItem("adv");advances=[];
+renderAdvances();alert("Advance Cleared");
+}
+}
+
+/* SALARY PAID */
+function renderPaid(){
+let y=paidYear.value;
+let t="<tr><th>Employee</th>"+months.map(m=>`<th>${m}</th>`).join("")+"</tr>";
+employees.forEach(e=>{
+t+=`<tr><td>${e.name}</td>`;
+months.forEach((m,i)=>{
+let key=`${e.name}_${y}_${i}`;
+t+=`<td>
+<input type="checkbox" ${paid[key]?"checked":""}
+onclick="paid['${key}']=this.checked;
+localStorage.setItem('paid',JSON.stringify(paid));renderPaid()">
+${paid[key]?"<div class='paid-label'>Salary Paid</div>":""}
+</td>`;
+});
+t+="</tr>";
+});
+paidTable.innerHTML=t;
+}
+
+/* ADMIN PIE */
+function drawAdmin(){
+drawPie("Shop","shopPie");
+drawPie("Godown","godownPie");
+}
+
+function drawPie(type,id){
+let c={P:0,A:0,H:0,L:0};
+employees.filter(e=>e.type===type).forEach(e=>{
+let s=attendance[adminDate.value]?.[e.name];
+if(c[s]!=null)c[s]++;
+});
+let ctx=document.getElementById(id).getContext("2d");
+ctx.clearRect(0,0,300,300);
+let total=Object.values(c).reduce((a,b)=>a+b,0),start=0;
+let colors={P:"green",A:"red",H:"orange",L:"brown"};
+for(let k in c){
+if(c[k]==0)continue;
+let slice=c[k]/total*2*Math.PI;
+ctx.beginPath();ctx.moveTo(150,150);
+ctx.arc(150,150,140,start,start+slice);
+ctx.fillStyle=colors[k];ctx.fill();
+let mid=start+slice/2;
+ctx.fillStyle="#000";
+ctx.fillText(c[k],150+90*Math.cos(mid),150+90*Math.sin(mid));
+start+=slice;
+}
+}
+
+function hardReset(){
+if(prompt("Password")==="7000021952"){
+localStorage.removeItem("att");attendance={};
+alert("Attendance Cleared");
+}
+}
+
+/* DROPDOWNS */
+function loadDropdowns(){
+  calcEmp.innerHTML = advEmp.innerHTML = histEmp.innerHTML =
+  employees.map(e=>`<option>${e.name}</option>`).join("");
+
+  [calcMonth,checkMonth,advMonth,advViewMonth,lateMonth,histMonth].forEach(s=>{
+    s.innerHTML=months.map((m,i)=>`<option value="${i}">${m}</option>`).join("");
+  });
+
+  [calcYear,checkYear,advYear,advViewYear,paidYear,lateYear,histYear].forEach(s=>{
+    s.innerHTML=years.map(y=>`<option>${y}</option>`).join("");
+  });
+
+  calcMonth.value=checkMonth.value=advMonth.value=advViewMonth.value=lateMonth.value=histMonth.value=now.getMonth();
+  calcYear.value=checkYear.value=advYear.value=advViewYear.value=paidYear.value=lateYear.value=histYear.value=now.getFullYear();
+  adminDate.value=now.toISOString().slice(0,10);
+}
+
+/* LATE DEDUCTION */
+function renderLateDeduction(){
+let m=+lateMonth.value;
+let y=+lateYear.value;
+
+let total=0;
+
+lateTable.innerHTML=
+"<tr><th>Employee</th><th>Late Count</th><th>Deduction (₹)</th></tr>";
+
+employees.forEach(emp=>{
+let lateCount=0;
+
+for(let d in attendance){
+let dt=new Date(d);
+if(dt.getMonth()==m && dt.getFullYear()==y){
+if(attendance[d][emp.name]==="L") lateCount++;
+}
+}
+
+let daily=emp.salary/30;
+let deduction=lateCount*0.2*daily;
+total+=deduction;
+
+lateTable.innerHTML+=`
+<tr>
+<td>${emp.name}</td>
+<td>${lateCount}</td>
+<td>₹${deduction.toFixed(2)}</td>
+</tr>`;
+});
+
+lateTotal.innerHTML=`Total Late Deduction: ₹${total.toFixed(2)}`;
+}
+
+/* Employee History */
+
+function renderHistory(){
+    let empName = histEmp.value;
+    let m = +histMonth.value;
+    let y = +histYear.value;
+    if(!empName) return;
+
+    /* 1️⃣ Attendance History */
+    let attRows = [];
+    for(let d in attendance){
+        let dt = new Date(d);
+        if(attendance[d][empName]!==undefined && dt.getMonth()==m && dt.getFullYear()==y){
+            attRows.push({date:d,status:attendance[d][empName]});
+        }
+    }
+
+    attRows.sort((a,b)=>new Date(a.date)-new Date(b.date));
+
+    if(attRows.length===0){
+        histAttTable.innerHTML="<tr><td colspan='2'>No attendance data</td></tr>";
+    } else {
+        histAttTable.innerHTML =
+        "<tr><th>Date</th><th>Status</th></tr>" +
+        attRows.map(r=>`
+        <tr>
+            <td>${r.date}</td>
+            <td class="status-${r.status}">${r.status}</td>
+        </tr>`).join("");
+    }
+
+    /* 2️⃣ Salary History (Selected Month & Year) */
+    histSalaryTable.innerHTML =
+    "<tr><th>Month</th><th>Present</th><th>Half Day</th><th>Late</th><th>Weekday Absent</th><th>Weekend Absent</th><th>Advance</th><th>Total Salary</th></tr>";
+
+    let emp = employees.find(e=>e.name===empName);
+    if(!emp) return;
+
+    let daily = emp.salary / 30;
+    let weekdayA=0, weekendA=0, half=0, late=0, present=0;
+
+    for(let d in attendance){
+        let dt = new Date(d);
+        if(dt.getMonth()!=m || dt.getFullYear()!=y) continue;
+        let s = attendance[d][empName];
+        if(s==="A"){ (dt.getDay()==0||dt.getDay()==6)?weekendA++:weekdayA++; }
+        if(s==="H") half++;
+        if(s==="L") late++;
+        if(s==="P") present++;
+    }
+
+    let extra = daily * emp.leave;
+    let weekendDeduction = emp.type==="Godown" ? weekendA*daily : weekendA*1.5*daily;
+    let deduct = weekdayA*daily + weekendDeduction + half*0.5*daily + late*0.2*daily;
+    let adv = advances
+        .filter(a=>a.name===empName && a.month==m && a.year==y)
+        .reduce((s,a)=>s+a.amount,0);
+
+    let total = emp.salary + extra - deduct - adv;
+
+    if(present+weekdayA+weekendA+half+late+adv > 0){
+        histSalaryTable.innerHTML += `
+        <tr>
+            <td>${months[m]} ${y}</td>
+            <td>${present}</td>
+            <td>${half}</td>
+            <td>${late}</td>
+            <td>${weekdayA}</td>
+            <td>${weekendA}</td>
+            <td>₹${adv}</td>
+            <td>₹${total.toFixed(2)}</td>
+        </tr>`;
+    } else {
+        histSalaryTable.innerHTML +=
+        `<tr><td colspan="8">No salary data</td></tr>`;
+    }
+
+    /* 3️⃣ Advances History */
+    let advs = advances.filter(a=>a.name===empName && a.month==m && a.year==y);
+
+    if(advs.length===0){
+        histAdvTable.innerHTML="<tr><td colspan='4'>No advances</td></tr>";
+    } else {
+        histAdvTable.innerHTML =
+        "<tr><th>Date</th><th>Amount</th><th>Description</th><th>Month-Year</th></tr>" +
+        advs.map(a=>`
+        <tr>
+            <td>${a.date}</td>
+            <td>₹${a.amount}</td>
+            <td>${a.desc}</td>
+            <td>${months[a.month]}-${a.year}</td>
+        </tr>`).join("");
+    }
+}
+let dragIndex = null;
+
+function dragStart(index){
+  dragIndex = index;
+}
+
+function dropRow(dropIndex){
+  if(dragIndex === null || dragIndex === dropIndex) return;
+
+  const moved = employees.splice(dragIndex, 1)[0];
+  employees.splice(dropIndex, 0, moved);
+
+  localStorage.setItem("emps", JSON.stringify(employees));
+  dragIndex = null;
+
+  renderEmployees();
+}
+
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+</body>
+</html>
